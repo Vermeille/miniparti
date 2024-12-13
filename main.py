@@ -10,10 +10,14 @@ Original file is located at
 #!pip install --force-reinstall git+https://github.com/vermeille/Torchelie
 #!pip install crayons visdom lpips
 
+import lpips
 import os
-if not os.path.exists('download.zip'):
-    os.system("wget https://cloud.vermeille.fr/s/36dOOpeBn7aIvcZ/download -O download.zip")
-if not os.path.exists('FCUNIST'):
+
+if not os.path.exists("download.zip"):
+    os.system(
+        "wget https://cloud.vermeille.fr/s/36dOOpeBn7aIvcZ/download -O download.zip"
+    )
+if not os.path.exists("FCUNIST"):
     os.system("unzip download.zip &> /dev/null")
 
 import math
@@ -33,16 +37,17 @@ import torchelie.callbacks as tcb
 
 from visdom import Visdom
 
+
 def Conv(in_ch, out_ch, ks):
     return nn.Conv2d(in_ch, out_ch, ks, padding=ks // 2)
 
 
 def ConvBNRelu(in_ch, out_ch, ks):
     return nn.Sequential(
-            Conv(in_ch, out_ch, ks),
-            nn.BatchNorm2d(out_ch, affine=True),
-            nn.ReLU(inplace=False),
-        )
+        Conv(in_ch, out_ch, ks),
+        nn.BatchNorm2d(out_ch, affine=True),
+        nn.ReLU(inplace=False),
+    )
 
 
 class PosEnc(nn.Module):
@@ -67,16 +72,18 @@ class ResBlk(nn.Module):
     def __init__(self, ch):
         super(ResBlk, self).__init__()
         self.go = nn.Sequential(
-                ConvBNRelu(ch, ch, 3),
-                ConvBNRelu(ch, ch, 3),
-            )
+            ConvBNRelu(ch, ch, 3),
+            ConvBNRelu(ch, ch, 3),
+        )
 
     def forward(self, x):
         return self.go(x) + x
 
+
 class NormChannel(nn.Module):
     def forward(self, x):
         return F.normalize(x, dim=1)
+
 
 class RMSNorm(nn.Module):
     def __init__(self, dim, eps=1e-8):
@@ -86,7 +93,11 @@ class RMSNorm(nn.Module):
         self.eps = eps
 
     def forward(self, x):
-        return x * torch.rsqrt(x.pow(2).mean(dim=1, keepdim=True) + self.eps) * self.scale
+        return (
+            x * torch.rsqrt(x.pow(2).mean(dim=1, keepdim=True) +
+                            self.eps) * self.scale
+        )
+
 
 class Encoder(nn.Module):
     def __init__(self, arch, hidden=128, vq_dim=8):
@@ -100,19 +111,41 @@ class Encoder(nn.Module):
         self.start_hidden = hidden
         for l in arch:
             ch = min(512, hidden)
-            if l == 'r':
+            if l == "r":
                 layers.append(tnn.PreactResBlock(ch, ch))
-            elif l == 'q':
+            elif l == "q":
                 layers.append(PosEnc(ch, 8, 8))
-                layers.append(Res(nn.Sequential(RMSNorm(ch), tnn.SelfAttention2d(ch, ch // 64, ch)))),
-                layers.append(xavier(nn.Conv2d(ch, vq_dim, 3, stride=1,
-                    padding=1)))
-            elif l == 'p':
+                (
+                    layers.append(
+                        Res(
+                            nn.Sequential(
+                                RMSNorm(ch), tnn.SelfAttention2d(
+                                    ch, ch // 64, ch)
+                            )
+                        )
+                    ),
+                )
+                layers.append(
+                    xavier(nn.Conv2d(ch, vq_dim, 3, stride=1, padding=1)))
+            elif l == "p":
                 nxt_hidden = hidden * 2
                 if ch >= 256:
-                    layers.append(Res(nn.Sequential(RMSNorm(ch), tnn.SelfAttention2d(ch, ch // 64, ch)))),
-                layers.append(xavier(nn.Conv2d(ch, min(512, nxt_hidden), 3, stride=2, padding=1)))
-                layers.append(nn.BatchNorm2d(min(512, nxt_hidden), affine=True))
+                    (
+                        layers.append(
+                            Res(
+                                nn.Sequential(
+                                    RMSNorm(ch), tnn.SelfAttention2d(
+                                        ch, ch // 64, ch)
+                                )
+                            )
+                        ),
+                    )
+                layers.append(
+                    xavier(nn.Conv2d(ch, min(512, nxt_hidden),
+                           3, stride=2, padding=1))
+                )
+                layers.append(nn.BatchNorm2d(
+                    min(512, nxt_hidden), affine=True))
                 hidden = nxt_hidden
         self.end_hidden = hidden
 
@@ -136,38 +169,54 @@ class Encoder(nn.Module):
             return qs[0]
 
 
-
 class Decoder(nn.Module):
     def __init__(self, arch, hidden=128, vq_dim=8):
         super(Decoder, self).__init__()
         layers = [
             xavier(nn.Conv2d(vq_dim, min(512, hidden), 3, padding=1)),
             PosEnc(min(512, hidden), 8, 8),
-            Res(nn.Sequential(RMSNorm(min(512, hidden)), tnn.SelfAttention2d(min(512, hidden), min(512, hidden) // 64, min(512, hidden)))),
+            Res(
+                nn.Sequential(
+                    RMSNorm(min(512, hidden)),
+                    tnn.SelfAttention2d(
+                        min(512, hidden), min(
+                            512, hidden) // 64, min(512, hidden)
+                    ),
+                )
+            ),
         ]
 
         for l in arch:
             ch = min(512, hidden)
-            if l == 'r':
+            if l == "r":
                 layers.append(tnn.PreactResBlock(ch, ch))
-            elif l == 'u':
+            elif l == "u":
                 nxt_hidden = hidden // 2
                 if False:
-                    layers.append(nn.ConvTranspose2d(hidden, hidden, 4, stride=2, padding=1))#nn.UpsamplingNearest2d(scale_factor=2))
+                    layers.append(
+                        nn.ConvTranspose2d(
+                            hidden, hidden, 4, stride=2, padding=1)
+                    )  # nn.UpsamplingNearest2d(scale_factor=2))
                 elif True:
                     layers.append(nn.UpsamplingBilinear2d(scale_factor=2))
-                    layers.append(xavier(nn.Conv2d(ch, min(512, nxt_hidden), 1, padding=0)))
-                    #layers.append(nn.BatchNorm2d(nxt_hidden, affine=True))
+                    layers.append(
+                        xavier(nn.Conv2d(ch, min(512, nxt_hidden), 1, padding=0))
+                    )
+                    # layers.append(nn.BatchNorm2d(nxt_hidden, affine=True))
                 else:
-                    layers.append(xavier(nn.Conv2d(ch, min(512, nxt_hidden)*4, 1, padding=0)))
+                    layers.append(
+                        xavier(
+                            nn.Conv2d(ch, min(512, nxt_hidden) * 4, 1, padding=0))
+                    )
                     layers.append(nn.PixelShuffle(2))
-                    #layers.append(xavier(nn.Conv2d(ch // 4, min(512, nxt_hidden), 1, padding=0)))
-                    layers.append(nn.BatchNorm2d(min(512, nxt_hidden), affine=True))
+                    # layers.append(xavier(nn.Conv2d(ch // 4, min(512, nxt_hidden), 1, padding=0)))
+                    layers.append(nn.BatchNorm2d(
+                        min(512, nxt_hidden), affine=True))
                 hidden = nxt_hidden
 
         layers += [
             nn.BatchNorm2d(hidden, affine=True),
-            xavier(Conv(hidden, 3, 3)),
+            xavier(Conv(hidden, 3, 1)),
         ]
 
         self.layers = nn.ModuleList(layers)
@@ -181,73 +230,81 @@ class Decoder(nn.Module):
 
 def AE(enc, dec, hidden=64, vq_dim=8):
     enc = Encoder(enc, hidden, vq_dim=vq_dim)
-    vq = tnn.VQ(vq_dim, 1024, dim=1, max_age=20, space="angular", return_indices=False)
+    vq = tnn.VQ(vq_dim, 1024, dim=1, max_age=20,
+                space="angular", return_indices=False)
     return nn.Sequential(enc, vq, Decoder(dec, enc.end_hidden, vq_dim=vq_dim))
 
 
 def AE_initialize(ae):
     for m in ae.modules():
         if isinstance(m, nn.Conv2d):
-            nn.init.kaiming_uniform_(m.weight, mode='fan_in', a=0.2)
+            nn.init.kaiming_uniform_(m.weight, mode="fan_in", a=0.2)
             nn.init.constant_(m.bias, 0)
         if isinstance(m, nn.BatchNorm2d):
             nn.init.constant_(m.weight, 1)
             nn.init.constant_(m.bias, 0)
     return ae
 
+
 def baseline_256():
-    return AE('rprrprrprrrprrrq', 'rrrurrrrurrrurrrurrr', hidden=32, vq_dim=32)
+    return AE("rprrprrprrrprrrq", "rrrurrrrurrrurrrurrr", hidden=32, vq_dim=32)
+
 
 SZ = 128
-tfms = TF.Compose([
-    TF.Resize(SZ),
-    TF.CenterCrop(SZ),
-    TF.RandomHorizontalFlip(),
-    TF.ToTensor(),
-])
+tfms = TF.Compose(
+    [
+        TF.Resize(SZ),
+        TF.CenterCrop(SZ),
+        TF.RandomHorizontalFlip(),
+        TF.ToTensor(),
+    ]
+)
 
-ds = torchvision.datasets.ImageFolder('FCUNIST/train', transform=tfms)
-dst = tch.datasets.UnlabeledImages('FCUNIST/test', transform=TF.Compose([TF.Resize(SZ), TF.CenterCrop(SZ), TF.ToTensor()]))
-print('dataset size:', len(ds))
-print('test dataset size:', len(dst))
-dl = torch.utils.data.DataLoader(ds,
-                                 batch_size=256,
-                                 shuffle=True,
-                                 num_workers=16,
-                                 pin_memory=True)
-dlt = torch.utils.data.DataLoader(dst,
-                                  batch_size=64,
-                                  shuffle=False,
-                                  num_workers=16,
-                                  drop_last=True,
-                                  pin_memory=True)
+ds = torchvision.datasets.ImageFolder("FCUNIST/train", transform=tfms)
+dst = tch.datasets.UnlabeledImages(
+    "FCUNIST/test",
+    transform=TF.Compose([TF.Resize(SZ), TF.CenterCrop(SZ), TF.ToTensor()]),
+)
+print("dataset size:", len(ds))
+print("test dataset size:", len(dst))
+dl = torch.utils.data.DataLoader(
+    ds, batch_size=256, shuffle=True, num_workers=16, pin_memory=True
+)
+dlt = torch.utils.data.DataLoader(
+    dst, batch_size=64, shuffle=False, num_workers=16, drop_last=True, pin_memory=True
+)
+
 
 class AdvLoss(nn.Module):
     def __init__(self, lr):
         super().__init__()
         from torchelie.models.snres_discr import residual_patch70
+
         self.model = residual_patch70()
-        #self.model.remove_batchnorm()
-        self.opt = torch.optim.AdamW(self.model.parameters(), lr=lr, betas=(0.9,  0.99))
+        # self.model.remove_batchnorm()
+        self.opt = torch.optim.AdamW(
+            self.model.parameters(), lr=lr, betas=(0.9, 0.99))
 
     def forward(self, fake, real):
         self.opt.zero_grad()
         f_pred = self.model(fake.detach())
-        loss = F.binary_cross_entropy_with_logits(f_pred, torch.zeros_like(f_pred))
+        loss = F.binary_cross_entropy_with_logits(
+            f_pred, torch.zeros_like(f_pred))
         loss.backward()
         f_pred = self.model(real)
-        loss = F.binary_cross_entropy_with_logits(f_pred, torch.ones_like(f_pred))
+        loss = F.binary_cross_entropy_with_logits(
+            f_pred, torch.ones_like(f_pred))
         loss.backward()
         self.opt.step()
 
         f_pred = self.model(fake)
-        loss = F.binary_cross_entropy_with_logits(f_pred, torch.ones_like(f_pred))
+        loss = F.binary_cross_entropy_with_logits(
+            f_pred, torch.ones_like(f_pred))
         return loss
 
 
-import lpips
-ploss = lpips.LPIPS(net='vgg', lpips=False).cuda()
-device = 'cuda'
+ploss = lpips.LPIPS(net="vgg", lpips=False).cuda()
+device = "cuda"
 m = baseline_256().to(device)
 print(m)
 lr = 3e-4
@@ -256,56 +313,66 @@ epoch = 120
 adv_loss = AdvLoss(1e-4).to(device)
 print(sum(p.numel() for p in m.parameters()) / 1e6, "M params")
 
+
 def train_fun(batch):
-  x = batch[0]
-  recon = m(x* 2 - 1)
-  loss = ploss.forward(recon * 2 - 1, x * 2 - 1).mean()
-  adv = adv_loss(recon * 2 - 1, x * 2 - 1)
-  loss += 1 * adv
-  loss.backward()
-  return {"loss": loss.item(), "adv_loss": adv.item()}
+    x = batch[0]
+    recon = m(x * 2 - 1)
+    loss = ploss.forward(recon * 2 - 1, x * 2 - 1).mean()
+    adv = adv_loss(recon * 2 - 1, x * 2 - 1)
+    loss += 1 * adv
+    loss.backward()
+    return {"loss": loss.item(), "adv_loss": adv.item()}
+
 
 @torch.no_grad()
 def test_fun(batch):
-  x = batch[0]
-  if False:
-      enc = m[0](x * 2 - 1)
-      m[1].return_indices = True
-      quant, idxs = m[1](enc)
-      m[1].return_indices = False
-      recon = m[2](quant)
-      idxs = idxs.squeeze(1)
-      for i in range(8):
-          idxs[i*8] = idxs[i*8].reshape(-1)[torch.randperm(8*8)].reshape(8, 8)
-      idxs[0] = torch.randint(0, 1024, (8, 8), device=x.device)
-      altered = m[2](m[1](idxs))
-      return {"recon": recon, "altered": altered}
-  else:
-      recon = m(x * 2 - 1)
-      loss = ploss.forward(recon * 2 - 1, x * 2 - 1).mean()
-      return {"recon": recon.detach(), "altered": x, "loss": loss.item()}
+    x = batch[0]
+    if False:
+        enc = m[0](x * 2 - 1)
+        m[1].return_indices = True
+        quant, idxs = m[1](enc)
+        m[1].return_indices = False
+        recon = m[2](quant)
+        idxs = idxs.squeeze(1)
+        for i in range(8):
+            idxs[i * 8] = idxs[i *
+                               8].reshape(-1)[torch.randperm(8 * 8)].reshape(8, 8)
+        idxs[0] = torch.randint(0, 1024, (8, 8), device=x.device)
+        altered = m[2](m[1](idxs))
+        return {"recon": recon, "altered": altered}
+    else:
+        recon = m(x * 2 - 1)
+        loss = ploss.forward(recon * 2 - 1, x * 2 - 1).mean()
+        return {"recon": recon.detach(), "altered": x, "loss": loss.item()}
+
 
 opt = torch.optim.AdamW(m.parameters(), lr=lr)
 sched = tch.lr_scheduler.CosineDecay(opt, epoch * len(dl))
-recipe = TrainAndTest(m, train_fun, test_fun, dl, dlt, log_every=1, test_every=20, visdom_env=None)
+recipe = TrainAndTest(
+    m, train_fun, test_fun, dl, dlt, log_every=1, test_every=20, visdom_env=None
+)
 
-recipe.callbacks.cbs[-1][0].vis = Visdom(env=tag, server="https://visdom.vermeille.fr", port=443)
+recipe.callbacks.cbs[-1][0].vis = Visdom(
+    env=tag, server="https://visdom.vermeille.fr", port=443
+)
 recipe.callbacks.cbs[-1][0].vis.close()
-recipe.callbacks.add_callbacks([
-    tcb.Optimizer(opt, log_lr=True, centralize_grad=True),
-    tcb.LRSched(sched, step_each_batch=True, metric=None),
-    tcb.Log('loss', 'loss'),
-    tcb.Log('adv_loss', 'adv_loss'),
-])
-recipe.test_loop.callbacks.cbs[-1][0].vis = Visdom(env=tag, server="https://visdom.vermeille.fr", port=443)
-recipe.test_loop.callbacks.add_callbacks([
-    tcb.EpochMetricAvg("loss", False),
-    tcb.Log('recon', 'recon'),
-    tcb.Log('altered', 'altered'),
-])
+recipe.callbacks.add_callbacks(
+    [
+        tcb.Optimizer(opt, log_lr=True, centralize_grad=True),
+        tcb.LRSched(sched, step_each_batch=True, metric=None),
+        tcb.Log("loss", "loss"),
+        tcb.Log("adv_loss", "adv_loss"),
+    ]
+)
+recipe.test_loop.callbacks.cbs[-1][0].vis = Visdom(
+    env=tag, server="https://visdom.vermeille.fr", port=443
+)
+recipe.test_loop.callbacks.add_callbacks(
+    [
+        tcb.EpochMetricAvg("loss", False),
+        tcb.Log("recon", "recon"),
+        tcb.Log("altered", "altered"),
+    ]
+)
 recipe.to(device)
 recipe.run(epoch)
-
-
-
-
