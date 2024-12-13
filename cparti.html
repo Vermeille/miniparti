@@ -1,0 +1,95 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Instructions</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 20px;
+      }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <body>
+    <img src="https://cloud.vermeille.fr/s/3QGpKv9uTL26xNb/download" width="40%">
+    <pre style="white-space: pre-wrap; display: none;" id="md">
+# CPARTI
+
+## Rewriting and Retraining PARTI's Transformer Component
+
+### Overview
+In this exam, you will work on **reimplementing and retraining the transformer component** of the PARTI
+(Pathways Autoregressive Text-to-Image) generator ([blog](https://sites.research.google/parti/), [paper](https://arxiv.org/abs/2206.10789)). For simplicity, we will focus solely on the transformer
+and remove text conditioning. You will train the model to predict the next image token based on previous
+tokens in an autoregressive manner.
+
+PARTI being quite a hard paper, you can instead read this one: [Autoregressive Model Beats Diffusion: Llama for Scalable Image Generation](https://arxiv.org/abs/2406.06525)
+
+---
+
+### Objectives
+1. **Rewrite the Transformer:**
+   - Implement the transformer architecture from scratch. You're allowed scaled_dot_product_attention from pytorch.
+   - Include features like multi-head attention, feed-forward layers, and positional encodings.
+   - There is no text conditioning so this a transformer decoder only.
+
+2. **Train the Transformer:**
+   - Train your rewritten transformer to model the image generation process as an autoregressive task.
+   - Use provided image tokens from a pre-tokenized dataset for training.
+
+3. **Evaluate the Transformer:**
+   - Measure the quality of the trained model by assessing the likelihood of token sequences on a validation set.
+   - Optionally, generate images by sampling tokens from the trained model.
+
+---
+
+### Dataset
+You will be provided with **a pre-tokenized image dataset:** This dataset contains image sequences tokenized into discrete codes using a VQ-VAE.
+
+---
+
+### Task Requirements
+#### 1. Rewriting the Transformer
+- Implement the transformer model architecture.
+- Again, contrarily to the text to image paper referenced, remove the text-conditioning pathway.
+
+#### 2. Training the Transformer
+- Use the provided training set to optimize the model.
+- Implement teacher forcing to train the model in an autoregressive manner.
+
+#### 3. Evaluating the Transformer
+- Calculate the **perplexity** of the model on the validation set.
+- (Optional) Generate sample token sequences from the trained model and decode them back into images using the VQ-VAE.
+
+---
+
+### Submission Requirements
+TBA
+
+---
+
+### Evaluation Criteria
+Your submission will be evaluated based on **Performance:** Quality of the trained model (measured by validation perplexity).
+
+---
+
+### Guidelines
+- Use standard transformer libraries for building your model. You are not required to implement low-level operations like attention from scratch.
+- Pay attention to hyperparameters like learning rate, dropout, and attention heads, as they significantly affect training stability.
+- Collaborating with others is not allowed. Your work must be your own.
+- You may consult course materials and public resources but must cite any external references used.
+
+---
+
+### Additional Notes
+- You are **not** required to implement the VQ-VAE tokenization or decoding process; this will be provided.
+
+---
+
+Good luck, and may your transformers generate impressive results!
+    </pre>
+  <div id="content"></div>
+  <script>
+    document.getElementById('content').innerHTML = marked.parse(document.getElementById('md').innerText);
+  </script>
+  </body>
+</html>
