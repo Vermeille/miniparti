@@ -13,7 +13,7 @@ import torchelie.callbacks as tcb
 
 from visdom import Visdom
 
-from .vqvae import baseline
+from vqvae import baseline
 
 
 def load_data(SZ):
@@ -51,9 +51,9 @@ def load_data(SZ):
 class AdvLoss(nn.Module):
     def __init__(self, lr):
         super().__init__()
-        from torchelie.models.snres_discr import residual_patch70
+        from torchelie.models.snres_discr import snres_discr_4l as D
 
-        self.model = residual_patch70()
+        self.model = D()
         self.opt = torch.optim.AdamW(
             self.model.parameters(), lr=lr, betas=(0.9, 0.99))
 
