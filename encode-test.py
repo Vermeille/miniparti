@@ -46,7 +46,7 @@ def main():
         for j, ind in enumerate(indices):
             filename = dl.dataset.samples[i * 256 + j]
             cls = class_to_idx[file_to_cls[filename.split("/")[-1]]]
-            print(f"test_{i*256+j}.png(mirror)", " ".join([str(cls)] + [str(ii) for ii in ind.reshape(-1).tolist()] + [str(random.randint(0, 1024)), str(random.randint(0, 1024))]))
+            print(f"test_{i*256+j}.png", " ".join([str(cls)] + [str(ii) for ii in ind.reshape(-1).tolist()] + [str(random.randint(0, 1024)), str(random.randint(0, 1024))]))
 
         z = model[0](TF.functional.hflip(x) * 2 - 1)
         _, indices = model[1](z)

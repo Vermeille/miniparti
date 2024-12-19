@@ -14,6 +14,14 @@ class PosEnc(nn.Module):
     def forward(self, x):
         return x + self.pos
 
+class Const(nn.Module):
+    def __init__(self, *shape):
+        super().__init__()
+        self.pos = nn.Parameter(torch.ones(*shape))
+
+    def forward(self, x):
+        return x * self.pos
+
 
 class Res(nn.Module):
     def __init__(self, mod):
@@ -49,7 +57,7 @@ class Encoder(nn.Module):
         layers = [
             tnn.Conv2d(3, hidden, 5),
             nn.BatchNorm2d(hidden, affine=True),
-            nn.ReLU(inplace=True),
+            nn.ReLU(),
         ]
 
         self.start_hidden = hidden
@@ -58,7 +66,7 @@ class Encoder(nn.Module):
             if layer == "r":
                 layers.append(tnn.PreactResBlock(ch, ch))
             elif layer == "q":
-                layers.append(PosEnc(ch, 8, 8))
+                layers.append(Const(ch, 8, 8))
                 (
                     layers.append(
                         Res(
@@ -118,7 +126,7 @@ class Decoder(nn.Module):
         super(Decoder, self).__init__()
         layers = [
             xavier(nn.Conv2d(vq_dim, min(512, hidden), 3, padding=1)),
-            PosEnc(min(512, hidden), 8, 8),
+            Const(min(512, hidden), 8, 8),
             Res(
                 nn.Sequential(
                     RMSNorm(min(512, hidden)),
@@ -175,9 +183,22 @@ class Decoder(nn.Module):
 def AE(enc, dec, hidden=64, vq_dim=8, codebook=1024):
     enc = Encoder(enc, hidden, vq_dim=vq_dim)
     vq = tnn.VQ(
-        vq_dim, codebook, dim=1, max_age=20, space="angular", return_indices=False
+        vq_dim, codebook, dim=1, max_age=5, space="angular", return_indices=False
     )
-    return nn.Sequential(enc, vq, Decoder(dec, enc.end_hidden, vq_dim=vq_dim))
+    dec = Decoder(dec, enc.end_hidden, vq_dim=vq_dim)
+    model = nn.Sequential(enc, vq, dec)
+
+    def change_bn(m):
+        if isinstance(m, nn.BatchNorm2d):
+            return nn.Identity() #nn.GroupNorm(1, m.num_features)
+        if isinstance(m, nn.ReLU):
+            m.inplace = False
+        return m
+
+    # all kind of normalization makes the model a bit worse but batchnorm is
+    # the worst of them all
+    tnn.utils.edit_model(dec, change_bn)
+    return model
 
 
 def baseline():
