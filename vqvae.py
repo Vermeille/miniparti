@@ -183,7 +183,7 @@ class Decoder(nn.Module):
 def AE(enc, dec, hidden=64, vq_dim=8, codebook=1024):
     enc = Encoder(enc, hidden, vq_dim=vq_dim)
     vq = tnn.VQ(
-        vq_dim, codebook, dim=1, max_age=5, space="angular", return_indices=False
+        vq_dim, codebook, dim=1, max_age=50, space="angular", return_indices=False
     )
     dec = Decoder(dec, enc.end_hidden, vq_dim=vq_dim)
     model = nn.Sequential(enc, vq, dec)
