@@ -52,8 +52,9 @@ class RMSNorm(nn.Module):
 
 
 class Encoder(nn.Module):
-    def __init__(self, arch, hidden=128, vq_dim=8):
+    def __init__(self, arch, hidden=128, vq_dim=8, full_size=128):
         super(Encoder, self).__init__()
+        down_size = int(full_size / 2**sum(1 for c in arch if c == 'p'))
         layers = [
             tnn.Conv2d(3, hidden, 5),
             nn.BatchNorm2d(hidden, affine=True),
@@ -66,7 +67,8 @@ class Encoder(nn.Module):
             if layer == "r":
                 layers.append(tnn.PreactResBlock(ch, ch))
             elif layer == "q":
-                layers.append(Const(ch, 8, 8))
+                #layers.append(Const(ch, down_size, down_size))
+                layers.append(nn.Identity())
                 (
                     layers.append(
                         Res(
@@ -122,11 +124,13 @@ class Encoder(nn.Module):
 
 
 class Decoder(nn.Module):
-    def __init__(self, arch, hidden=128, vq_dim=8):
+    def __init__(self, arch, hidden=128, vq_dim=8, full_size=128):
         super(Decoder, self).__init__()
+        down_size = int(full_size / 2**sum(1 for c in arch if c == 'u'))
         layers = [
             xavier(nn.Conv2d(vq_dim, min(512, hidden), 3, padding=1)),
-            Const(min(512, hidden), 8, 8),
+            #Const(min(512, hidden), down_size, down_size),
+            nn.Identity(),
             Res(
                 nn.Sequential(
                     RMSNorm(min(512, hidden)),
@@ -144,26 +148,10 @@ class Decoder(nn.Module):
                 layers.append(tnn.PreactResBlock(ch, ch))
             elif layer == "u":
                 nxt_hidden = hidden // 2
-                if False:
-                    layers.append(
-                        nn.ConvTranspose2d(
-                            hidden, hidden, 4, stride=2, padding=1)
-                    )  # nn.UpsamplingNearest2d(scale_factor=2))
-                elif True:
-                    layers.append(nn.UpsamplingBilinear2d(scale_factor=2))
-                    layers.append(
-                        xavier(nn.Conv2d(ch, min(512, nxt_hidden), 1, padding=0))
-                    )
-                    # layers.append(nn.BatchNorm2d(nxt_hidden, affine=True))
-                else:
-                    layers.append(
-                        xavier(
-                            nn.Conv2d(ch, min(512, nxt_hidden) * 4, 1, padding=0))
-                    )
-                    layers.append(nn.PixelShuffle(2))
-                    # layers.append(xavier(nn.Conv2d(ch // 4, min(512, nxt_hidden), 1, padding=0)))
-                    layers.append(nn.BatchNorm2d(
-                        min(512, nxt_hidden), affine=True))
+                layers.append(nn.UpsamplingBilinear2d(scale_factor=2))
+                layers.append(
+                    xavier(nn.Conv2d(ch, min(512, nxt_hidden), 1, padding=0))
+                )
                 hidden = nxt_hidden
 
         layers += [
@@ -180,12 +168,12 @@ class Decoder(nn.Module):
         return torch.sigmoid(x)
 
 
-def AE(enc, dec, hidden=64, vq_dim=8, codebook=1024):
-    enc = Encoder(enc, hidden, vq_dim=vq_dim)
+def AE(enc, dec, hidden=64, vq_dim=8, codebook=1024, full_size=128):
+    enc = Encoder(enc, hidden, vq_dim=vq_dim, full_size=full_size)
     vq = tnn.VQ(
-        vq_dim, codebook, dim=1, max_age=50, space="angular", return_indices=False
+        vq_dim, codebook, dim=1, max_age=5, space="angular", return_indices=False
     )
-    dec = Decoder(dec, enc.end_hidden, vq_dim=vq_dim)
+    dec = Decoder(dec, enc.end_hidden, vq_dim=vq_dim, full_size=full_size)
     model = nn.Sequential(enc, vq, dec)
 
     def change_bn(m):
@@ -201,5 +189,5 @@ def AE(enc, dec, hidden=64, vq_dim=8, codebook=1024):
     return model
 
 
-def baseline():
-    return AE("rprrprrprrrprrrq", "rrrurrrrurrrurrrurrr", hidden=32, vq_dim=32)
+def baseline(size):
+    return AE("rprrprrprrrprrrq", "rrrurrrrurrrurrrurrr", hidden=32, vq_dim=32, full_size=size)

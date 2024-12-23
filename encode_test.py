@@ -31,7 +31,7 @@ def load_data(SZ):
         ]
     )
 
-    ds = LabeledTestSet("dataset-test.json", "FCUNIST/test", transform=tfms)
+    ds = LabeledTestSet("reference_test.json", "FCUNIST/test", transform=tfms)
     dl = torch.utils.data.DataLoader(
         ds, batch_size=256, shuffle=False, num_workers=16, pin_memory=True
     )
@@ -43,28 +43,29 @@ def main():
     import sys
 
     device = "cpu"
-    dl = load_data(128)
-    model = baseline()
-    model.load_state_dict(torch.load(sys.argv[1], map_location=device)[
-                          "model"])
+    dl = load_data(256)
+    model = baseline(256)
+    torch.nn.ModuleDict({"model":model}).load_state_dict(torch.load(sys.argv[1], map_location=device)[
+                          "model"], strict=False)
     model.eval()
     model[1].return_indices = True
 
     for i, (x, y) in enumerate(dl):
-        x = x[0].to(device)
+        print(x.shape, y.shape)
+        x = x.to(device)
         z = model[0](x * 2 - 1)
         _, indices = model[1](z)
         for j, ind in enumerate(indices):
             filename = dl.dataset.samples[i * 256 + j]
-            cls = y[j]
-            print(f"test_{i*256+j}.png", " ".join([str(cls)] + [str(ii) for ii in ind.reshape(-1).tolist()] + [str(random.randint(0, 1024)), str(random.randint(0, 1024))]))
+            cls = y[j].item()
+            print(f"test_{i*256+j}.png", " ".join([str(cls)] + [str(ii) for ii in ind.reshape(-1).tolist()]))
 
         z = model[0](TF.functional.hflip(x) * 2 - 1)
         _, indices = model[1](z)
         for j, ind in enumerate(indices):
             filename = dl.dataset.samples[i * 256 + j]
-            cls = y[j]
-            print(f"test_{i*256+j}.png(mirror)", " ".join([str(cls)] + [str(ii) for ii in ind.reshape(-1).tolist()] + [str(random.randint(0, 1024)), str(random.randint(0, 1024))]))
+            cls = y[j].item()
+            print(f"test_{i*256+j}.png(mirror)", " ".join([str(cls)] + [str(ii) for ii in ind.reshape(-1).tolist()]))
 
 
 if __name__ == "__main__":

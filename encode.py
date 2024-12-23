@@ -26,10 +26,10 @@ def main():
     import sys
 
     device = "cpu"
-    dl = load_data(128)
-    model = baseline()
-    model.load_state_dict(torch.load(sys.argv[1], map_location=device)[
-                          "model"])
+    dl = load_data(256)
+    model = baseline(256)
+    torch.nn.ModuleDict({"model": model}).load_state_dict(torch.load(sys.argv[1], map_location=device)[
+                          "model"], strict=False)
     model.eval()
     model[1].return_indices = True
 
@@ -39,13 +39,13 @@ def main():
         _, indices = model[1](z)
         for j, (ind, yy) in enumerate(zip(indices, y)):
             filename = dl.dataset.samples[i * 256 + j][0]
-            print(filename, " ".join([str(yy.item())] + [str(ii) for ii in ind.reshape(-1).tolist()] + [str(random.randint(0, 1024)), str(random.randint(0, 1024))]))
+            print(filename, " ".join([str(yy.item())] + [str(ii) for ii in ind.reshape(-1).tolist()]))
 
         z = model[0](TF.functional.hflip(x) * 2 - 1)
         _, indices = model[1](z)
         for j, (ind, yy) in enumerate(zip(indices, y)):
             filename = dl.dataset.samples[i * 256 + j][0] + "(mirror)"
-            print(filename, " ".join([str(yy.item())] + [str(ii) for ii in ind.reshape(-1).tolist()] + [str(random.randint(0, 1024)), str(random.randint(0, 1024))]))
+            print(filename, " ".join([str(yy.item())] + [str(ii) for ii in ind.reshape(-1).tolist()]))
 
 
 if __name__ == "__main__":
