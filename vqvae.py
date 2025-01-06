@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 import torchelie.nn as tnn
-from torchelie.utils import xavier
+from torchelie.utils import xavier, kaiming, normal_init
 
 
 class PosEnc(nn.Module):
@@ -190,4 +190,57 @@ def AE(enc, dec, hidden=64, vq_dim=8, codebook=1024, full_size=128):
 
 
 def baseline(size):
-    return AE("rprrprrprrrprrrq", "rrrurrrrurrrurrrurrr", hidden=32, vq_dim=32, full_size=size)
+    ae = AE("rprrprrprrprrrrq", "rrrrurrrurrurrurr", hidden=32, vq_dim=32, full_size=size)
+
+    def to_convnext(m):
+        if isinstance(m, tnn.PreactResBlock):
+            in_c = m.in_channels
+            out_c = m.out_channels
+            m.branch.relu = nn.Identity()
+            m.branch.conv1 = nn.Conv2d(in_c, in_c, 7, padding=3, groups=in_c)
+            m.branch.conv2 = nn.Conv2d(in_c, out_c, 1)
+        return m
+    tnn.utils.edit_model(ae, to_convnext)
+    return ae
+
+
+class SimpleConvNextBlock(nn.Module):
+    def __init__(self, dim):
+        super().__init__()
+        self.branch = nn.Sequential(
+            nn.Conv2d(dim, dim, 7, padding=3, groups=dim),
+            #xavier(nn.Conv2d(dim, dim*4, 1)),
+            nn.LeakyReLU(0.2),
+            normal_init(nn.Conv2d(dim, dim, 1), 0.0),
+        )
+
+    def forward(self, x):
+        return x + self.branch(x)
+
+
+class Discr(nn.Module):
+    def __init__(self, arch, in_dim, dim_base):
+        super().__init__()
+        layers = [
+            nn.Conv2d(3, dim_base, 1)
+        ]
+        for a in arch:
+            if a == 'c':
+                layers.append(SimpleConvNextBlock(dim_base))
+            elif a == 'd':
+                next_dim = min(1024, dim_base * 2)
+                layers.append(xavier(nn.Conv2d(dim_base, next_dim, 1)))
+                layers.append(xavier(nn.Conv2d(next_dim, next_dim, 3, padding=1, stride=2, groups=next_dim)))
+                dim_base = next_dim
+            elif a == 'x':
+                self.cond_in = nn.Conv2d(in_dim, dim_base, 1)
+                self.img_in = nn.Sequential(*layers)
+                layers = []
+            else:
+                assert False, f"invalid {a} in arch"
+        layers.append(nn.Conv2d(dim_base, 1, 1))
+        self.common = nn.Sequential(*layers)
+
+
+    def forward(self, x, cond):
+        return self.common(self.img_in(x) + self.cond_in(cond))

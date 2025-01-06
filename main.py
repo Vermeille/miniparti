@@ -86,7 +86,7 @@ class AdvLoss(nn.Module):
 
 def main():
     SZ = 256
-    lr = 2e-5
+    lr = 1e-4
     device = "cuda"
     epoch = 240
 
@@ -107,10 +107,10 @@ def main():
         class_pred = class_loss(zq)
         clf_loss = F.cross_entropy(class_pred, y)
 
-        loss = ploss.forward(F.interpolate(recon * 2 - 1, size=SZ, mode="bilinear"), F.interpolate(x * 2 - 1, size=SZ, mode="bilinear")).mean()
-        adv = adv_loss(recon * 2 - 1, x * 2 - 1, y)
+        loss = ploss.forward(F.interpolate(recon * 2 - 1, size=128, mode="bilinear"), F.interpolate(x * 2 - 1, size=128, mode="bilinear")).mean()
+        adv = torch.tensor([0])#adv_loss(recon * 2 - 1, x * 2 - 1, y)
         loss += clf_loss
-        loss += 1 * adv
+        #loss += 1 * adv
         loss.backward()
         return {"loss": loss.item(), "adv_loss": adv.item(), "clf_loss": clf_loss.item(), "class_acc": (class_pred.argmax(-1) == batch[1]).float().mean().item()}
 
@@ -125,7 +125,7 @@ def main():
         return {"recon": recon.detach(), "altered": x, "loss": loss.item(), "class_acc": (class_pred.argmax(-1) == batch[1]).float().mean().item()}
 
     dl, dlt = load_data(SZ)
-    opt = torch.optim.AdamW([{"params": m[0].parameters(), "lr":1e-4}, {"params": m[1].parameters(), "lr": 1e-4}, {"params": m[2].parameters()}, {"params":class_loss.parameters(), "lr": 3e-4, "betas": (0.9, 0.999)}], lr=lr, betas=(0., 0.99), weight_decay=0.01)
+    opt = torch.optim.AdamW([{"params": m[0].parameters(), "lr":1e-4}, {"params": m[1].parameters(), "lr": 1e-4}, {"params": m[2].parameters()}, {"params":class_loss.parameters(), "lr": 3e-4, "betas": (0.9, 0.999)}], lr=lr, betas=(0.9, 0.999), weight_decay=0.01)
     sched = tch.lr_scheduler.CosineDecay(opt, epoch * len(dl), warmup_ratio=0)
     all_models = nn.ModuleDict({
             "model": m,
@@ -133,7 +133,7 @@ def main():
             "D": adv_loss.model,
         })
     #all_models.load_state_dict(torch.load("vqvae128.pth")["model"])
-    tch.utils.load_state_dict_forgiving(all_models, torch.load("vqvae128.pth")["model"], fit_dst_size=True)
+    #tch.utils.load_state_dict_forgiving(all_models, torch.load("vqvae128.pth")["model"], fit_dst_size=True)
     import copy
     dec_ema = copy.deepcopy(m[2])
     all_models = nn.ModuleDict({
@@ -143,7 +143,7 @@ def main():
             "ema": dec_ema
         })
     recipe = TrainAndTest(
-        all_models, train_fun, test_fun, dl, dlt, log_every=10, test_every=10, visdom_env=None
+        all_models, train_fun, test_fun, dl, dlt, log_every=10, test_every=100, visdom_env=None
     )
 
     recipe.callbacks.cbs[-1][0].vis = Visdom(
@@ -159,7 +159,7 @@ def main():
             tcb.Log("clf_loss", "clf_loss"),
             tcb.Log("class_acc", "class_acc"),
             #tcb.Log("batch.0", "orig"),
-            tcb.Polyak(m[2], dec_ema, 0.99)
+            tcb.Polyak(m[2], dec_ema, 0.9)
         ]
     )
     recipe.test_loop.callbacks.cbs[-1][0].vis = Visdom(
